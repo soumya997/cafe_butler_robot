@@ -4,91 +4,58 @@ import rospy
 import actionlib
 from cafe_butler_robot.msg import DeliveryTaskAction, DeliveryTaskGoal
 
-def delivery_feedback_cb(feedback):
-    """Callback function for delivery feedback."""
-    rospy.loginfo(f"Current State: {feedback.current_state}")
-    rospy.loginfo(f"Current Table: {feedback.current_table}")
-    rospy.loginfo(f"Progress: {feedback.progress}%")
-
-def test_single_delivery():
-    """Test single table delivery."""
+def send_delivery_order(table_number):
+    """Send a delivery order for a single table"""
     client = actionlib.SimpleActionClient('delivery_task', DeliveryTaskAction)
+    rospy.loginfo("Waiting for server...")
     client.wait_for_server()
-
+    
     goal = DeliveryTaskGoal()
-    goal.table_numbers = [1]
+    goal.table_numbers = [table_number]
     goal.is_multi_order = False
-
-    rospy.loginfo("Sending single delivery goal...")
-    client.send_goal(goal, feedback_cb=delivery_feedback_cb)
     
+    rospy.loginfo(f"\nSending order for table {table_number}")
+    rospy.loginfo("You will need to confirm at both kitchen and table")
+    rospy.loginfo("Press Enter to confirm or wait for 10-second timeout")
+    
+    # Send the goal
+    client.send_goal(
+        goal,
+        feedback_cb=lambda fb: rospy.loginfo(f"Robot Status: {fb.current_state} (Table {fb.current_table})")
+    )
+    
+    # Wait for result
     client.wait_for_result()
     result = client.get_result()
     
     if result.success:
-        rospy.loginfo("Single delivery completed successfully")
+        rospy.loginfo(f"\nDelivery completed successfully!")
     else:
-        rospy.logwarn(f"Single delivery failed: {result.message}")
-        if result.failed_tables:
-            rospy.logwarn(f"Failed tables: {result.failed_tables}")
+        rospy.logwarn(f"\nDelivery failed for tables {result.failed_tables}")
+        rospy.logwarn(f"Reason: {result.message}")
 
-def test_multi_delivery():
-    """Test multiple table delivery."""
-    client = actionlib.SimpleActionClient('delivery_task', DeliveryTaskAction)
-    client.wait_for_server()
-
-    goal = DeliveryTaskGoal()
-    goal.table_numbers = [1, 2, 3]
-    goal.is_multi_order = True
-
-    rospy.loginfo("Sending multi-delivery goal...")
-    client.send_goal(goal, feedback_cb=delivery_feedback_cb)
+def main():
+    rospy.init_node('test_client')
     
-    client.wait_for_result()
-    result = client.get_result()
-    
-    if result.success:
-        rospy.loginfo("Multi-delivery completed successfully")
-    else:
-        rospy.logwarn(f"Multi-delivery failed: {result.message}")
-        if result.failed_tables:
-            rospy.logwarn(f"Failed tables: {result.failed_tables}")
+    while not rospy.is_shutdown():
+        try:
+            # Get table number from user
+            table_input = input("\nEnter table number (1-3) or 'q' to quit: ")
+            
+            if table_input.lower() == 'q':
+                break
+            
+            try:
+                table_number = int(table_input)
+                if 1 <= table_number <= 3:
+                    send_delivery_order(table_number)
+                else:
+                    rospy.logwarn("Please enter a valid table number (1-3)")
+            except ValueError:
+                rospy.logwarn("Please enter a valid number")
+                
+        except (rospy.ROSInterruptException, KeyboardInterrupt):
+            break
 
-def test_cancelled_delivery():
-    """Test cancellation of delivery."""
-    client = actionlib.SimpleActionClient('delivery_task', DeliveryTaskAction)
-    client.wait_for_server()
-
-    goal = DeliveryTaskGoal()
-    goal.table_numbers = [1, 2, 3]
-    goal.is_multi_order = True
-
-    rospy.loginfo("Sending goal that will be cancelled...")
-    client.send_goal(goal, feedback_cb=delivery_feedback_cb)
-    
-    rospy.sleep(2.0) 
-    client.cancel_goal()
-    rospy.loginfo("Goal cancelled")
-    
-    client.wait_for_result()
-    result = client.get_result()
-    
-    if result:
-        rospy.loginfo(f"Cancellation result: {result.message}")
-        if result.failed_tables:
-            rospy.loginfo(f"Unserved tables: {result.failed_tables}")
-
-if __name__ == "__main__":
-    try:
-        rospy.init_node('butler_robot_test_client')
-        
-        test_single_delivery()
-        rospy.sleep(2.0) 
-        
-        test_multi_delivery()
-        rospy.sleep(2.0)  
-        
-        test_cancelled_delivery()
-        
-    except rospy.ROSInterruptException:
-        pass 
+if __name__ == '__main__':
+    main() 

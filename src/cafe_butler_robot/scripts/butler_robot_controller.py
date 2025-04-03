@@ -30,6 +30,7 @@ class ButlerRobotController:
         self.current_table = 0
         self.tables_to_serve = []
         self.failed_tables = []
+        
         self.kitchen_timeout = rospy.get_param("~kitchen_timeout", 30.0)  # seconds
         self.table_timeout = rospy.get_param("~table_timeout", 30.0)  # seconds
         self.movement_time = rospy.get_param("~movement_time", 5.0)  # seconds
@@ -125,6 +126,7 @@ class ButlerRobotController:
             self._return_to_kitchen()
         self._return_home()
         
+        # add the meesage
         result = DeliveryTaskResult()
         result.success = False
         result.message = "Task cancelled"
