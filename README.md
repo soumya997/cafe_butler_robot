@@ -1,6 +1,8 @@
 # Cafe Butler Robot
  This is a simple ROS1 based butler robot that pretends to deliver food in a cafe. It's pretty basic right now - just moving between states and publishing messages.
 
+youtube: https://youtu.be/7YCTzwoOat0
+
 ## Working
 
 The robot goes through a cycle of states, kind of like a really simple delivery person:
