@@ -234,65 +234,88 @@ class TurtleButler:
         """Main service loop"""
         while not rospy.is_shutdown():
             try:
-                # Get table number
-                table_input = input("\nEnter table number (1-3) or 'q' to quit: ")
+                # Get table numbers
+                table_input = input("\nEnter table numbers (e.g., '1,2,3' or '2,3') or 'q' to quit: ")
                 
                 if table_input.lower() == 'q':
                     break
                 
                 try:
-                    table_num = int(table_input)
-                    if 1 <= table_num <= 3:
-                        # Move to kitchen
-                        rospy.loginfo("\nMoving to kitchen to pick up food...")
-                        reached, cancelled = self.move_to_position(*self.POSITIONS['KITCHEN'])
+                    # Parse table numbers
+                    table_nums = [int(num.strip()) for num in table_input.split(',')]
+                    valid_tables = [num for num in table_nums if 1 <= num <= 3]
+                    
+                    if not valid_tables:
+                        rospy.logwarn("Please enter valid table numbers (1-3)")
+                        continue
                         
-                        if cancelled:
-                            rospy.loginfo("Cancellation while moving to kitchen, returning home...")
-                            self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
-                            continue
-                        
-                        # Wait for kitchen staff to prepare food
-                        rospy.loginfo("\nWaiting for kitchen staff to prepare food...")
-                        rospy.loginfo("Press Enter when food is ready, or wait for timeout")
-                        if not self.wait_for_confirmation('KITCHEN'):
-                            rospy.logwarn("Kitchen staff not ready, returning home")
-                            self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
-                            continue
-                        
+                    if len(valid_tables) != len(table_nums):
+                        rospy.logwarn("Some invalid table numbers were ignored")
+                    
+                    # Remove duplicates while preserving order
+                    valid_tables = list(dict.fromkeys(valid_tables))
+                    
+                    rospy.loginfo(f"\nReceived order for tables: {valid_tables}")
+                    
+                    # Move to kitchen first
+                    rospy.loginfo("\nMoving to kitchen to pick up food...")
+                    reached, cancelled = self.move_to_position(*self.POSITIONS['KITCHEN'])
+                    
+                    if cancelled:
+                        rospy.loginfo("Cancellation while moving to kitchen, returning home...")
+                        self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
+                        continue
+                    
+                    # Wait for kitchen to prepare all orders
+                    rospy.loginfo(f"\nWaiting for kitchen staff to prepare food for tables: {valid_tables}")
+                    rospy.loginfo("Press Enter when all orders are ready, or wait for timeout")
+                    if not self.wait_for_confirmation('KITCHEN'):
+                        rospy.logwarn("Kitchen staff not ready, returning home")
+                        self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
+                        continue
+                    
+                    # Deliver to each table in sequence
+                    delivered_tables = []
+                    for table_num in valid_tables:
                         # Move to table
-                        rospy.loginfo(f"\nFood ready! Moving to table {table_num}...")
-                        self.moving_to_table = True  # Set flag for table movement
+                        rospy.loginfo(f"\nDelivering to table {table_num}...")
+                        self.moving_to_table = True
                         reached, cancelled = self.move_to_position(*self.POSITIONS[f'TABLE{table_num}'])
-                        self.moving_to_table = False  # Reset flag
+                        self.moving_to_table = False
                         
                         if cancelled:
-                            rospy.loginfo("Cancellation while moving to table, returning food to kitchen...")
-                            # Return to kitchen after U-turn
+                            rospy.loginfo(f"Cancellation while moving to table {table_num}, returning remaining food to kitchen...")
                             self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
                             rospy.loginfo("Food returned to kitchen, going home...")
                             self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
-                            continue
+                            break
                         
                         # Wait for table confirmation
                         rospy.loginfo(f"\nWaiting for customer at table {table_num}...")
                         rospy.loginfo("Press Enter if food is accepted, or wait for timeout to return food")
                         if self.wait_for_confirmation(f'TABLE{table_num}'):
-                            # Food was accepted, return directly home
-                            rospy.loginfo("\nFood delivered successfully, returning home...")
-                            self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
-                            rospy.loginfo("Delivery completed!")
+                            rospy.loginfo(f"Food delivered to table {table_num}")
+                            delivered_tables.append(table_num)
                         else:
-                            # No one took the food, return it to kitchen
-                            rospy.logwarn(f"No one at table {table_num}, returning food to kitchen...")
+                            rospy.logwarn(f"No one at table {table_num}, returning this order to kitchen...")
                             self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
-                            rospy.loginfo("Food returned to kitchen, going home...")
-                            self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
-                            
+                            continue
+                    
+                    # After all deliveries or if cancelled
+                    if delivered_tables:
+                        if len(delivered_tables) == len(valid_tables):
+                            rospy.loginfo("\nAll deliveries completed successfully!")
+                        else:
+                            rospy.loginfo(f"\nPartially completed deliveries. Delivered to tables: {delivered_tables}")
                     else:
-                        rospy.logwarn("Please enter a valid table number (1-3)")
+                        rospy.logwarn("No deliveries were completed")
+                    
+                    # Return home after all deliveries
+                    rospy.loginfo("Returning to home position...")
+                    self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
+                    
                 except ValueError:
-                    rospy.logwarn("Please enter a valid number")
+                    rospy.logwarn("Please enter valid table numbers separated by commas")
                     
             except (rospy.ROSInterruptException, KeyboardInterrupt):
                 rospy.loginfo("\nShutting down...")
