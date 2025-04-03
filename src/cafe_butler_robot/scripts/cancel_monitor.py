@@ -4,17 +4,23 @@ import rospy
 from std_msgs.msg import String
 
 def monitor_cancellation():
-    rospy.init_node('cancel_monitor')
-    cancel_pub = rospy.Publisher('/robot_cancel', String, queue_size=1)
+    rospy.init_node('cancel_monitor', anonymous=True)
+    cancel_pub = rospy.Publisher('/robot_cancel', String, queue_size=10)
+    rate = rospy.Rate(10)  # 10Hz
     
     rospy.loginfo("Cancel Monitor is ready!")
     rospy.loginfo("Press 'c' and Enter to cancel the robot's current task")
     
     while not rospy.is_shutdown():
         try:
-            user_input = input().lower()
+            user_input = input().lower().strip()
             if user_input == 'c':
-                cancel_pub.publish(String("cancel"))
+                msg = String()
+                msg.data = "cancel"
+                # Publish multiple times to ensure message is received
+                for _ in range(5):
+                    cancel_pub.publish(msg)
+                    rate.sleep()
                 rospy.loginfo("Cancellation command sent!")
         except (EOFError, KeyboardInterrupt):
             break

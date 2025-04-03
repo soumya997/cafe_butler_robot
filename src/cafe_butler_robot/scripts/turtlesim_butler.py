@@ -90,7 +90,25 @@ class TurtleButler:
                 with self.input_lock:
                     if self.task_cancelled:
                         self.stop_movement()
-                        rospy.loginfo("\nTask cancelled by user!")
+                        # Make a U-turn by rotating 180 degrees
+                        rospy.loginfo("\nTask cancelled! Making U-turn...")
+                        current_angle = self.current_pose.theta
+                        target_angle = current_angle + math.pi
+                        
+                        # Normalize target angle
+                        while target_angle > math.pi:
+                            target_angle -= 2 * math.pi
+                        while target_angle < -math.pi:
+                            target_angle += 2 * math.pi
+                        
+                        # Rotate to face opposite direction
+                        while abs(self.current_pose.theta - target_angle) > 0.1 and not rospy.is_shutdown():
+                            cmd = Twist()
+                            cmd.angular.z = 1.0
+                            self.cmd_vel_pub.publish(cmd)
+                            rate.sleep()
+                        
+                        self.stop_movement()
                         return False, True
             
             dx = target_x - self.current_pose.x
@@ -244,11 +262,13 @@ class TurtleButler:
                         
                         # Move to table
                         rospy.loginfo(f"\nFood ready! Moving to table {table_num}...")
+                        self.moving_to_table = True  # Set flag for table movement
                         reached, cancelled = self.move_to_position(*self.POSITIONS[f'TABLE{table_num}'])
+                        self.moving_to_table = False  # Reset flag
                         
                         if cancelled:
                             rospy.loginfo("Cancellation while moving to table, returning food to kitchen...")
-                            # Return via kitchen when cancelled during table movement
+                            # Return to kitchen after U-turn
                             self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
                             rospy.loginfo("Food returned to kitchen, going home...")
                             self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
