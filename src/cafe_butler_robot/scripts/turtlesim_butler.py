@@ -280,8 +280,11 @@ class TurtleButler:
                     # Deliver to each table in sequence
                     delivered_tables = []
                     undelivered_tables = []
+                    delivery_completed = False  # Flag to track if we've completed the delivery cycle
                     
-                    for table_num in valid_tables:
+                    for i, table_num in enumerate(valid_tables):
+                        is_last_table = i == len(valid_tables) - 1
+                        
                         # Move to table
                         rospy.loginfo(f"\nDelivering to table {table_num}...")
                         self.moving_to_table = True
@@ -290,8 +293,11 @@ class TurtleButler:
                         
                         if cancelled:
                             rospy.loginfo(f"Cancellation while moving to table {table_num}, returning remaining food to kitchen...")
-                            # Add remaining tables to undelivered list
-                            undelivered_tables.extend(valid_tables[valid_tables.index(table_num):])
+                            undelivered_tables.extend(valid_tables[i:])
+                            self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
+                            rospy.loginfo("Going home...")
+                            self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
+                            delivery_completed = True
                             break
                         
                         # Wait for table confirmation
@@ -300,37 +306,38 @@ class TurtleButler:
                         if self.wait_for_confirmation(f'TABLE{table_num}'):
                             rospy.loginfo(f"Food delivered to table {table_num}")
                             delivered_tables.append(table_num)
+                            
+                            if is_last_table:
+                                # Last table accepted the food, go directly home
+                                rospy.loginfo("\nLast delivery completed, returning home...")
+                                self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
+                                if undelivered_tables:
+                                    rospy.logwarn(f"Note: Could not deliver to previous tables: {undelivered_tables}")
+                                delivery_completed = True
+                                break
                         else:
                             rospy.logwarn(f"No one at table {table_num}")
-                            if is_multiple_order:
+                            if is_multiple_order and not is_last_table:
+                                # Not last table, continue to next
                                 rospy.loginfo("Continuing to next table...")
                                 undelivered_tables.append(table_num)
                             else:
-                                # For single orders, return to kitchen immediately
+                                # Last table or single order, return via kitchen
                                 rospy.logwarn("Returning food to kitchen...")
                                 self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
+                                rospy.loginfo("Going home...")
                                 self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
-                                continue
+                                delivery_completed = True
+                                break
                     
-                    # After all delivery attempts
-                    if delivered_tables:
-                        if len(delivered_tables) == len(valid_tables):
-                            rospy.loginfo("\nAll deliveries completed successfully!")
-                        else:
-                            rospy.loginfo(f"\nPartially completed deliveries. Delivered to tables: {delivered_tables}")
-                            if undelivered_tables:
-                                rospy.logwarn(f"Could not deliver to tables: {undelivered_tables}")
-                    else:
-                        rospy.logwarn("No deliveries were completed")
-                    
-                    # For multiple orders or if cancelled, always return via kitchen
-                    if is_multiple_order or cancelled:
-                        rospy.loginfo("Returning to kitchen...")
-                        self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
-                    
-                    # Finally return home
-                    rospy.loginfo("Returning to home position...")
-                    self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
+                    # Only handle remaining cases if we haven't completed delivery cycle
+                    if not delivery_completed:
+                        if not delivered_tables:
+                            rospy.logwarn("No deliveries were completed")
+                            rospy.loginfo("Returning to kitchen with all food...")
+                            self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
+                            rospy.loginfo("Going home...")
+                            self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
                     
                 except ValueError:
                     rospy.logwarn("Please enter valid table numbers separated by commas")
