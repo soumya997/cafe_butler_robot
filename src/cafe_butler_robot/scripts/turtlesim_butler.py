@@ -255,6 +255,9 @@ class TurtleButler:
                     # Remove duplicates while preserving order
                     valid_tables = list(dict.fromkeys(valid_tables))
                     
+                    # Check if this is a multiple-order scenario
+                    is_multiple_order = len(valid_tables) > 1
+                    
                     rospy.loginfo(f"\nReceived order for tables: {valid_tables}")
                     
                     # Move to kitchen first
@@ -276,6 +279,8 @@ class TurtleButler:
                     
                     # Deliver to each table in sequence
                     delivered_tables = []
+                    undelivered_tables = []
+                    
                     for table_num in valid_tables:
                         # Move to table
                         rospy.loginfo(f"\nDelivering to table {table_num}...")
@@ -285,32 +290,45 @@ class TurtleButler:
                         
                         if cancelled:
                             rospy.loginfo(f"Cancellation while moving to table {table_num}, returning remaining food to kitchen...")
-                            self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
-                            rospy.loginfo("Food returned to kitchen, going home...")
-                            self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
+                            # Add remaining tables to undelivered list
+                            undelivered_tables.extend(valid_tables[valid_tables.index(table_num):])
                             break
                         
                         # Wait for table confirmation
                         rospy.loginfo(f"\nWaiting for customer at table {table_num}...")
-                        rospy.loginfo("Press Enter if food is accepted, or wait for timeout to return food")
+                        rospy.loginfo("Press Enter if food is accepted, or wait for timeout")
                         if self.wait_for_confirmation(f'TABLE{table_num}'):
                             rospy.loginfo(f"Food delivered to table {table_num}")
                             delivered_tables.append(table_num)
                         else:
-                            rospy.logwarn(f"No one at table {table_num}, returning this order to kitchen...")
-                            self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
-                            continue
+                            rospy.logwarn(f"No one at table {table_num}")
+                            if is_multiple_order:
+                                rospy.loginfo("Continuing to next table...")
+                                undelivered_tables.append(table_num)
+                            else:
+                                # For single orders, return to kitchen immediately
+                                rospy.logwarn("Returning food to kitchen...")
+                                self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
+                                self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
+                                continue
                     
-                    # After all deliveries or if cancelled
+                    # After all delivery attempts
                     if delivered_tables:
                         if len(delivered_tables) == len(valid_tables):
                             rospy.loginfo("\nAll deliveries completed successfully!")
                         else:
                             rospy.loginfo(f"\nPartially completed deliveries. Delivered to tables: {delivered_tables}")
+                            if undelivered_tables:
+                                rospy.logwarn(f"Could not deliver to tables: {undelivered_tables}")
                     else:
                         rospy.logwarn("No deliveries were completed")
                     
-                    # Return home after all deliveries
+                    # For multiple orders or if cancelled, always return via kitchen
+                    if is_multiple_order or cancelled:
+                        rospy.loginfo("Returning to kitchen...")
+                        self.move_to_position(*self.POSITIONS['KITCHEN'], check_cancel=False)
+                    
+                    # Finally return home
                     rospy.loginfo("Returning to home position...")
                     self.move_to_position(*self.POSITIONS['HOME'], check_cancel=False)
                     
