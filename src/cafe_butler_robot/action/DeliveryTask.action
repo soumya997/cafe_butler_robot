@@ -1,0 +1,13 @@
+# Goal
+int32[] table_numbers  # List of table numbers for delivery
+bool is_multi_order    # Flag to indicate if this is a multi-table order
+---
+# Result
+bool success          # Whether the delivery was successful
+string message        # Status message
+int32[] failed_tables # List of tables where delivery failed
+---
+# Feedback
+string current_state  # Current state of the robot (AT_HOME, MOVING_TO_KITCHEN, AT_KITCHEN, MOVING_TO_TABLE, AT_TABLE)
+int32 current_table   # Current table being served
+float32 progress      # Progress percentage (0-100) 
