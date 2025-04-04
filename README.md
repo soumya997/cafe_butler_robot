@@ -1,94 +1,75 @@
 # Cafe Butler Robot
- This is a simple ROS1 based butler robot that pretends to deliver food in a cafe. It's pretty basic right now - just moving between states and publishing messages.
 
-youtube: https://youtu.be/7YCTzwoOat0
+I added a ROS-based robot butler system using turtlesim for visualization. The robot serves as a waiter, delivering food from the kitchen to different tables in turtle sim window.
 
-## Working
+<img src="media/Untitled Diagram.png" width="500">
 
-The robot goes through a cycle of states, kind of like a really simple delivery person:
+## System Components
 
-1. Starts at home (probably charging or just chilling)
-2. Goes to the kitchen (takes 5 seconds to get there)
-3. Hangs out at the kitchen for 2 seconds (pretending to pick up food)
-4. Heads to a table (another 5-second journey)
-5. Stays at the table for 2 seconds (dropping off the food)
-6. Goes back home (5 more seconds)
-7. Takes a quick 5-second break
-8. Rinse and repeat!
+### Files and Their Purpose
 
-## State Changes (The Fun Part!)
+1. `position_marker.py`: Initializes the turtlesim environment by marking positions for:
+   - Home (1,1)
+   - Kitchen (9,9)
+   - Table 1 (3,5)
 
-Here's how our robot changes its mood (states):
-```
-AT_HOME -> "Alright, time to work!"
-MOVING_TO_KITCHEN -> "Walking to kitchen... beep boop"
-AT_KITCHEN -> "Yo chef, got any orders ready?"
-MOVING_TO_TABLE -> "Coming through! Hot food!"
-AT_TABLE -> "Here's your order! Enjoy!"
-RETURNING_HOME -> "Heading back to my charging spot!"
-```
+   - Table 2 (5,5)
+   - Table 3 (7,5)
 
-Each state change is just simulated with a timer right now this is what i could do in a short time. In a real robot, this would be WAY more complex with actual movement, sensors, and probably a lot of bumping into things during testing 
 
-## Requirements
+2. `turtlesim_butler.py`: Main robot control script that:
+   - Handles robot movement between positions
+   - Manages food delivery tasks
+   - Processes user confirmations
+   - Implements cancellation behavior
 
-- ROS Noetic
-- Python 3.x
-- Just two ROS packages:
-  - rospy
-  - std_msgs
+3. `cancel_monitor.py`: Provides a separate interface for task cancellation:
+   - Monitors for 'c' key press
+   - Publishes cancellation commands to the robot
 
-## Getting Started
+## How It Works
 
-1. Clone this bad boy:
-```bash
-cd ~/catkin_ws/src
-git clone https://github.com/soumya997/cafe_butler_robot.git
-```
+The system uses turtlesim to visualize a robot butler in a cafe environment. The turtle represents the robot, and red circles mark different locations (home, kitchen, tables). The robot:
 
-2. Build it:
-```bash
-cd ~/catkin_ws
-catkin_make
-```
+1. Starts at the home position
+2. Moves to kitchen to collect food
+3. Waits for kitchen staff confirmation
+4. Delivers to specified tables
+5. Waits for customer confirmation at each table
+6. Returns home after completing deliveries
 
-3. Source it (don't forget this or nothing will work!):
-```bash
-source ~/catkin_ws/devel/setup.bash
-```
+### Cancellation Behavior
+- If canceled while moving to kitchen: Robot returns directly home
+- If canceled while moving to table: Robot returns to kitchen first, then home
+- If no confirmation at table: Continues to next table (for multiple orders) or returns via kitchen
 
-## Running the Robot
+## Running the System
 
-You need three terminal windows (I know, I know, but that's ROS for you):
+Open four terminal windows and run these commands in order:
 
-1. run the roscore
+1. Start ROS core:
 ```bash
 roscore
 ```
 
-2. run the actual robot controller node, that moves based on the state changes
+2. Launch turtlesim:
 ```bash
-rosrun cafe_butler_robot butler_robot_controller.py
+rosrun turtlesim turtlesim_node
 ```
 
-3. run the test client node to listen to the state changes and print them:
+3. Start the robot butler:
 ```bash
-rosrun cafe_butler_robot test_client.py
+rosrun cafe_butler_robot turtlesim_butler.py
 ```
 
+4. Start the cancellation monitor:
+```bash
+rosrun cafe_butler_robot cancel_monitor.py
+```
 
+## Usage
 
-
-## Future Ideas (aka "Things We Should Probably Add")
-
-- Actually detect when we reach places (instead of just waiting 5 seconds)
-- Avoid running into things (kind of important)
-- Real navigation (instead of just pretending to move)
-- Actually pick up and put down food (robot arms, anyone?)
-- Make sure we don't spill drinks everywhere
-- A proper UI for the kitchen staff
-- Emergency stop (for when things go wrong, and they will!)
-- add a behavior tree to make it more realistic and handle different tasks
-
-# Actionlib
-Actionlib is like a smart message system for complex robot tasks. Instead of just sending simple one way msgs (like "I'm at kitchen"), it handles the whole convo between the kitchen and robot. The kitcen can send a task ("deliver to table 5"), get progress updates ("moving to table, 50% done"), cancel the task if needed ("oops, wrong table!"), and know if it succeded or failed ("delivery complete!" or "couldn't reach table"). It's there to managing long-running tasks that need feedback and control, rather than just simple status updates.  `DeliveryTask.action` file because it defines the structure of the action messages used by actionlib.
+1. Enter table numbers when prompted (e.g., "1,2,3" or "2,3")
+2. Press Enter to confirm when robot reaches kitchen/table
+3. Press 'c' in the cancel_monitor terminal to cancel current task
+4. Enter 'q' to quit the program
